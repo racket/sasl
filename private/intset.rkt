@@ -1,5 +1,29 @@
 #lang racket/base
-(provide int-in-set? char-in-set?)
+(require (for-syntax racket/base syntax/parse racket/match))
+(provide intset
+         char-predicate
+         int-in-set?
+         char-in-set?)
+
+(define-syntax (intset stx)
+  (define-syntax-class range
+    (pattern [lo:nat hi:nat])
+    (pattern lo:nat #:with hi #'lo))
+  (syntax-parse stx
+    [(_ r:range ...)
+     (define ranges0 (syntax->datum #'((r.lo r.hi) ...)))
+     (define (compress ranges)
+       (match ranges
+         [(list* (list lo1 hi1) (list lo2 hi2) more)
+          (cond [(= (add1 hi1) lo2)
+                 (compress (list* (list lo1 hi2) more))]
+                [else
+                 (cons (car ranges) (compress (cdr ranges)))])]
+         [else ranges]))
+     #`(quote #,(list->vector (apply append (compress ranges0))))]))
+
+(define ((char-predicate . sets) c)
+  (for/or ([s (in-list sets)]) (char-in-set? c s)))
 
 (define (char-in-set? c is) (int-in-set? (char->integer c) is))
 
