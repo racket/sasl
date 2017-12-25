@@ -8,12 +8,17 @@
 ;; - https://tools.ietf.org/html/rfc4013 (SASLprep profile)
 
 ;; saslprep : String -> String
-(define (saslprep orig #:allow-unassigned? [allow-unassigned? #f])
+(define (saslprep orig #:who [who #f] #:allow-unassigned? [allow-unassigned? #f])
   (let* ([s (do-mapping orig)]
-         [s (do-normalize s orig)])
-    (do-prohibit s orig allow-unassigned?)
-    (do-check-bidi s orig)
+         [s (string-normalize-nfkc s)])
+    (do-prohibit who s orig allow-unassigned?)
+    (do-check-bidi who s orig)
     s))
+
+(define (err who fmt . args)
+  (if who
+      (error who "error in SASLprep: ~a" (apply format fmt args))
+      (apply error 'saslprep fmt args)))
 
 ;; 1. Mapping
 
@@ -28,16 +33,13 @@
 (define map-to-space?   (char-predicate non-ascii-space-characters))
 (define map-to-nothing? (char-predicate commonly-mapped-to-nothing))
 
-;; 2. Normalize
-
-(define (do-normalize s orig)
-  (string-normalize-nfkc s))
+;; 2. Normalize (KC)
 
 ;; 3. Prohibit
 
-(define (do-prohibit s orig allow-unassigned?)
+(define (do-prohibit who s orig allow-unassigned?)
   (for ([c (in-string s)])
-    (define (bad msg) (error 'saslprep "~a\n  string: ~e\n  prohibited: ~e" msg orig c))
+    (define (bad msg) (err who "~a\n  string: ~e\n  prohibited: ~e" msg orig c))
     (when (prohibited-char? c)
       (bad "prohibited character in string"))
     (when (and (not allow-unassigned?) (unassigned-char? c))
@@ -48,9 +50,9 @@
 
 ;; 4. Check Bidi
 
-(define (do-check-bidi s orig)
+(define (do-check-bidi who s orig)
   (define (bad msg)
-    (error 'saslprep "bidirectional check failed;\n ~a\n  string: ~e" msg orig))
+    (err who "bidirectional check failed;\n ~a\n  string: ~e" msg orig))
   (cond [(zero? (string-length s)) (void)]
         [(for/or ([c (in-string s)]) (RandAL-char? c))
          (for ([c (in-string s)])
