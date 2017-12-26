@@ -1,44 +1,45 @@
 #lang racket/base
-(require racket/string
+(require racket/match
+         racket/string
          racket/random
          racket/list
          net/base64
          "saslprep.rkt"
+         "private/base.rkt"
          "private/crypto.rkt")
 (provide (all-defined-out))
 
-;; base64: canonical, no whitespace!
-;; SASLprep in stored mode (ie, disallow unassigned)
-;;   client prepares before sending to server
+(define-syntax-rule (define/ref h (var ...))
+  (begin (define var (hash-ref h 'var)) ...))
+(define-syntax-rule (define! h var rhs)
+  (begin (define var rhs) (hash-set! h 'var var)))
 
-;; parameter H (hash function)
+;; FIXME: wrap base64 and other error-raising helpers so ctx fails
 
-;; Hi(str, salt, i) = PBKDF2[prf=HMAC[H]](str, salt, i)
+;; ============================================================
 
-;; type CBind = String* | #t | #f
+(struct scram-ctx sasl-ctx (h))
+(struct scram-client-ctx scram-ctx ())
+
+;; ============================================================
 
 ;; 1: C->S
 
-(define (make-scram-ctx digest authcid authzid password)
-  (define cbind #f)
-  (define p-authcid (saslprep authcid))
-  (define p-authzid (and authzid (saslprep authzid)))
-  (define p-password (string->bytes/utf-8 (saslprep password)))
-  (define gs2-header
+(define (make-scram-client-ctx digest authcid password #:authorization-id [authzid #f])
+  (define h (make-hasheq))
+  (hash-set! h 'digest digest)
+  (define! h cbind #f)
+  (define! h p-authcid (saslprep authcid #:who 'make-scram-client-ctx))
+  (define! h p-authzid (and authzid (saslprep authzid #:who 'make-scram-client-ctx)))
+  (define! h p-password (string->bytes/utf-8 (saslprep password)))
+  (define! h gs2-header
     (string-append (cond [(string? cbind) (format "p=~a" cbind)]
                          [else (if cbind "y" "n")])
                    "," (if p-authzid (format "a=~a" (encode-name p-authzid)) "") ","))
-  (define client-nonce (generate-client-nonce))
-  (define msg-c1/bare (format "n=~a,r=~a" (encode-name p-authcid) client-nonce))
-  (define msg-c1 (string-append gs2-header msg-c1/bare))
-  (hasheq 'digest digest 'authcid authcid 'authzid authzid 'password password
-          'p-authcid p-authcid 'p-authzid p-authzid 'p-password p-password
-          'cbind cbind 'gs2-header gs2-header
-          'client-nonce client-nonce
-          'msg-c1/bare msg-c1/bare 'msg-c1 msg-c1))
-
-(define (scram-client-first-message ctx)
-  (hash-ref ctx 'msg-c1))
+  (define! h client-nonce (generate-client-nonce))
+  (define! h msg-c1/bare (format "n=~a,r=~a" (encode-name p-authcid) client-nonce))
+  (define! h msg-c1 (string-append gs2-header msg-c1/bare))
+  (scram-client-ctx msg-c1 (cons 'send scram-client-receive-1) h))
 
 (define CLIENT-NONCE-SIZE 24)
 (define (generate-client-nonce)
@@ -57,87 +58,77 @@
          (generate-client-nonce)]))
 
 ;; 2: S->C
+;; 3: C->S
 
-;; scram-receive-server-first-message : ScramCtx String -> (values Nat String String)
-(define (scram-receive-server-first-message ctx msg-s1)
-  (define records (split-message msg-s1))
-  (define iters0 (hash-ref records #\i))
-  (unless (regexp-match? #rx"^[0-9]+$" iters0)
-    (error 'scram-receive-server-first-message
-           "bad iteration count\n  got: ~e" iters0))
-  (define iters (string->number iters0))
-  (define salt (base64-string-decode (hash-ref records #\s)))
-  (define client-nonce (hash-ref ctx 'client-nonce))
-  (define nonce (hash-ref records #\r))
+;; scram-client-receive-1 : Ctx String -> Void
+(define (scram-client-receive-1 ctx msg-s1)
+  (match-define (scram-client-ctx _ _ h) ctx)
+  (define/ref h (client-nonce digest gs2-header p-password cbind msg-c1/bare))
+  (hash-set! h 'msg-s1 msg-s1)
+  (define records (split-message ctx msg-s1 '(#\i #\s #\r)))
+
+  (define! h iters
+    (let ([iters0 (hash-ref records #\i)])
+      ;; FIXME: check >= 4096 or customizable limit?
+      (unless (regexp-match? #rx"^[0-9]+$" iters0)
+        (fatal ctx "got bad iteration count from server\n  got: ~e" iters0))
+      (string->number iters0)))
+  (define! h salt (base64->bytes (hash-ref records #\s)))
+  ;; FIXME: check salt length?
+  (define! h nonce (hash-ref records #\r))
+  ;; FIXME: check nonce only printable chars?
   (unless (and (> (string-length nonce) (string-length client-nonce))
                (equal? client-nonce (substring nonce 0 (string-length client-nonce))))
-    (error 'scram-receive-server-first-message
-           "server nonce does not extend client nonce\n  server nonce: ~e\n  client nonce: ~e"
-           nonce client-nonce))
+    (fatal ctx "got bad nonce from server (not extension of chosen prefix)"))
 
-  (define digest (hash-ref ctx 'digest))
-  (define gs2-header (hash-ref ctx 'gs2-header))
-  (define p-password (hash-ref ctx 'p-password))
-  (define cbind (hash-ref ctx 'cbind))
   ;; SaltedPassword  := Hi(Normalize(password), salt, i)
-  (define salted-password (pbkdf2 digest p-password salt iters))
+  (define! h salted-password (pbkdf2 digest p-password salt iters))
   ;; ClientKey       := HMAC(SaltedPassword, "Client Key")
-  (define client-key (hmac digest salted-password #"Client Key"))
+  (define! h client-key (hmac digest salted-password #"Client Key"))
   ;; ServerKey       := HMAC(SaltedPassword, "Server Key")
-  (define server-key (hmac digest salted-password #"Server Key"))
+  (define! h server-key (hmac digest salted-password #"Server Key"))
 
   ;; cbind-input = gs2-header [ cbind-data ] -- present iff gs2-cbind-flag="p"
-  (define cbind-input (string-append gs2-header (if (string? cbind) '??? "")))
+  (define cbind-data (if (string? cbind) (fatal ctx "unimplemented") ""))
+  (define! h cbind-input (string-append gs2-header cbind-data))
   ;; channel-binding = "c=" <base64 encoding of cbind-input>
   ;; client-final-message-wo-proof = channel-binding "," nonce ["," extensions]
-  (define msg-c2/no-proof (format "c=~a,r=~a" (string->base64 cbind-input) nonce))
+  (define! h msg-c2/no-proof (format "c=~a,r=~a" (->base64-bytes cbind-input) nonce))
 
   ;; StoredKey       := H(ClientKey)
-  (define stored-key (md digest client-key))
+  (define! h stored-key (md digest client-key))
   ;; AuthMessage     := client-first-message-bare + "," +
   ;;                    server-first-message + "," +
   ;;                    client-final-message-without-proof
-  (define msg-c1/bare (hash-ref ctx 'msg-c1/bare))
-  (define auth-message (string-append msg-c1/bare "," msg-s1 "," msg-c2/no-proof))
+  (define! h auth-message (string-append msg-c1/bare "," msg-s1 "," msg-c2/no-proof))
   ;; ClientSignature := HMAC(StoredKey, AuthMessage)
-  (define client-signature (hmac digest stored-key auth-message))
+  (define! h client-signature (hmac digest stored-key auth-message))
   ;; ClientProof     := ClientKey XOR ClientSignature
-  (define client-proof (bytes-xor client-key client-signature))
+  (define! h client-proof (bytes-xor client-key client-signature))
   ;; ServerSignature := HMAC(ServerKey, AuthMessage)
-  (define server-signature (hmac digest server-key auth-message))
+  (define! h server-signature (hmac digest server-key auth-message))
   ;; client-final-message = client-final-message-wo-proof "," proof
-  (define msg-c2 (format "~a,p=~a" msg-c2/no-proof (base64-encode client-proof "")))
-
-  (hash-set* ctx 'msg-s1 msg-s1 'salt salt 'iters iters 'nonce nonce
-             'salted-password salted-password
-             'client-key client-key 'server-key server-key
-             'cbind-input cbind-input 'msg-c2/no-proof msg-c2/no-proof
-             'stored-key stored-key 'auth-message auth-message
-             'client-signature client-signature 'client-proof client-proof
-             'server-signature server-signature 'msg-c2 msg-c2))
-
-;; 3: C->S
-
-(define (scram-client-final-message ctx)
-  (hash-ref ctx 'msg-c2))
+  (define! h msg-c2 (format "~a,p=~a" msg-c2/no-proof (base64-encode client-proof "")))
+  (set-sasl! ctx msg-c2 (cons 'send scram-client-receive-2)))
 
 ;; 4: S->C
 
-(define (scram-receive-server-final-message ctx msg-s2)
-  (define records (split-message msg-s2))
+(define (scram-client-receive-2 ctx msg-s2)
+  (match-define (scram-client-ctx _ _ h) ctx)
+  (define/ref h (server-signature))
+  (hash-set! h 'msg-s2 msg-s2)
+  (define records (split-message ctx msg-s2 '()))
   (cond [(hash-ref records #\v)
-         => (lambda (enc-verifier)
-              (define server-signature (base64-decode (string->bytes/utf-8 enc-verifier)))
-              (unless (equal? server-signature (hash-ref ctx 'server-signature))
-                (error 'scram-receive-server-final-message
-                       "invalid server signature"))
-              (hash-set ctx 'msg-s2 msg-s2))]
+         => (lambda (verifier)
+              (define! h signature (base64->bytes verifier))
+              (unless (equal? signature server-signature)
+                (fatal ctx "received invalid signature from server"))
+              (set-sasl! ctx #f 'success))]
         [(hash-ref records #\e)
          => (lambda (server-error)
-              (error 'scram-receive-server-final-message
-                     "error returned by server\n  error: ~e" server-error))]
-        [else (error 'scram-receive-server-final-message
-                     "invalid message: neither verifier nor error\n  message: ~e" msg-s2)]))
+              (hash-set! h 'error server-error)
+              (fatal ctx "received error from server\n  error: ~a" server-error))]
+        [else (fatal ctx "received unknown response from server (expected signature or error)")]))
 
 ;; ------------------------------------------------------------
 
@@ -152,22 +143,21 @@
         (get-output-string out))
       s))
 
-(define (split-message msg)
-  (define attrs
-    (map decode-attr-val (string-split msg "," #:trim? #f)))
-  (when (check-duplicates (map car attrs))
-    (error 'split-message "duplicate attribute"))
+(define (split-message ctx msg required-keys)
+  (define (decode-attr-val s)
+    (define (bad) (fatal ctx "error parsing attribute in received message\n  input: ~e" s))
+    (unless (>= (string-length s) 2) (bad))
+    (unless (alpha-char? (string-ref s 0)) (bad))
+    (unless (equal? (substring s 1 2) "=") (bad))
+    (cons (string-ref s 0) (substring s 2)))
+  (define attrs (map decode-attr-val (string-split msg "," #:trim? #f)))
+  (define keys (map car attrs))
+  (let ([dup (check-duplicates keys)])
+    (when dup (fatal ctx "duplicate attribute in received message\n  attribute: ~e" dup)))
+  (for ([key (in-list required-keys)])
+    (unless (member key keys)
+      (fatal ctx "missing required attribute in received message\n  attribute: ~e" key)))
   (make-hash attrs))
-
-(define (decode-attr-val s)
-  (define (bad) (error 'decode-attr-val "error parsing attr-val\n  input: ~e" s))
-  (unless (>= (string-length s) 2) (bad))
-  (unless (alpha-char? (string-ref s 0)) (bad))
-  (unless (equal? (substring s 1 2) "=") (bad))
-  (cons (string-ref s 0) (substring s 2)))
 
 (define (alpha-char? c)
   (or (char<=? #\a c #\z) (char<=? #\A c #\Z)))
-
-(define (string->base64 s) (base64-encode (string->bytes/utf-8 s) ""))
-(define (base64-string-decode s) (base64-decode (string->bytes/utf-8 s)))
