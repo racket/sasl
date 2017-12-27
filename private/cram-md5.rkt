@@ -1,7 +1,7 @@
 #lang racket/base
 (require racket/match
          file/sha1
-         "../saslprep.rkt"
+         "saslprep.rkt"
          "base.rkt"
          "crypto.rkt")
 (provide (all-defined-out))

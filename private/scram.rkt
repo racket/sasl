@@ -4,7 +4,7 @@
          racket/random
          racket/list
          net/base64
-         "../saslprep.rkt"
+         "saslprep.rkt"
          "base.rkt"
          "crypto.rkt")
 (provide (all-defined-out))
