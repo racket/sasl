@@ -13,6 +13,7 @@
 (define-libcrypto EVP_MD_size (_fun _EVP_MD -> _int))
 (define-libcrypto EVP_MD_block_size (_fun _EVP_MD -> _int))
 
+(define-libcrypto EVP_md5    (_fun -> _EVP_MD))
 (define-libcrypto EVP_sha1   (_fun -> _EVP_MD))
 (define-libcrypto EVP_sha256 (_fun -> _EVP_MD))
 
@@ -84,6 +85,7 @@
 
 (define (get-evp-md who digest)
   (case digest
+    [(md5) (EVP_md5)]
     [(sha1) (EVP_sha1)]
     [(sha256) (EVP_sha256)]
     [else (error who "unsupported digest\n  digest: ~e" digest)]))
