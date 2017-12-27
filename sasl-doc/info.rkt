@@ -4,6 +4,8 @@
 (define collection "sasl")
 (define deps '("base"))
 (define build-deps '("scribble-lib"
-                     "sandbox-lib"
+                     "sasl-lib"
                      "racket-doc"))
 (define update-implies '("sasl-lib"))
+
+(define scribblings '(("sasl.scrbl" () (net-library))))
