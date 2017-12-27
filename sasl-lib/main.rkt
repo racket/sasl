@@ -5,6 +5,5 @@
          (contract-out
           [sasl-next-message    (-> sasl-ctx? any/c)]
           [sasl-receive-message (-> sasl-ctx? any/c any)]
-          [sasl-succeeded?      (-> sasl-ctx? boolean?)]
-          [sasl-failed?         (-> sasl-ctx? boolean?)])
+          [sasl-state           (-> sasl-ctx? symbol?)])
          (struct-out exn:fail:sasl:fatal))

@@ -9,46 +9,44 @@
 
 (struct sasl-ctx (outbox k) #:mutable)
 ;; where outbox : String/Bytes or #f -- #f means no message available
-;;       k : (self String/Bytes -> Void) | (cons 'send k) | 'success | 'error
+;;       k : (self String/Bytes -> Void) | 'done | 'error
+;; INV: if k = 'error then outbox = #f
 
 (define (sasl-next-message ctx)
   (define msg (sasl-ctx-outbox ctx))
-  (unless msg (error 'sasl-next-message "no outgoing message available"))
-  (match (sasl-ctx-k ctx)
-    [(cons 'send k) (set-sasl-ctx-k! ctx k)]
-    [_ (void)])
+  (unless msg
+    (error 'sasl-next-message
+           "sequence violation: not allowed in current state\n  state: ~s\n  allowed in: ~s"
+           (sasl-state ctx) '(send/receive send/done)))
   msg)
 
 (define (sasl-receive-message ctx msg)
   (match (sasl-ctx-k ctx)
     [(? procedure? recv-k) (recv-k ctx msg)]
-    [(cons 'send k) (bad-state 'sasl-receive-message "call sasl-next-message first")]
-    ['success (bad-state 'sasl-receive-message "protocol finished")]
-    ['error (bad-state 'sasl-receive-message "authentication process failed")]))
+    [_ (error 'sasl-receive-message
+              "sequence violation: not allowed in current state\n  state=~s\n  allowed in: ~s"
+              (sasl-state ctx) '(receive send/receive))]))
 
-(define (sasl-succeeded? ctx)
-  (match ctx [(sasl-ctx out 'success) #t] [_ #f]))
-(define (sasl-failed? ctx)
-  (match ctx [(sasl-ctx out 'error) #t] [_ #f]))
+(define (sasl-state ctx)
+  (match (sasl-ctx-k ctx)
+    [(? procedure?) (if (sasl-ctx-outbox ctx) 'send/receive 'receive)]
+    ['done (if (sasl-ctx-outbox ctx) 'send/done 'done)]
+    ['error 'error]))
 
 ;; ----
-(define (bad-state who what)
-  (error who "sequence violation;\n ~a" what))
 
 (define (set-sasl! ctx outbox k)
   (set-sasl-ctx-outbox! ctx outbox)
   (set-sasl-ctx-k! ctx k))
-
-(define (with-ctx ctx proc)
-  (with-handlers ([void (lambda (e) (set-sasl-ctx-k! ctx 'error) (raise e))])
-    (proc)))
 
 ;; ----------------------------------------
 
 (struct exn:fail:sasl:fatal exn:fail (msg))
 
 (define (fatal ctx #:who [who0 #f] fmt . args)
-  (when ctx (set-sasl-ctx-k! ctx 'error))
+  (when ctx
+    (set-sasl-ctx-k! ctx 'error)
+    (set-sasl-ctx-outbox! ctx #f))
   (define who (or who0 'sasl-receive-message))
   (define msg (apply format fmt args))
   (raise (exn:fail:sasl:fatal (format "~a: ~a" who msg) (current-continuation-marks) msg)))

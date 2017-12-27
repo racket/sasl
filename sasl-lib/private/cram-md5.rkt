@@ -22,7 +22,7 @@
   (match-define (cram-md5-client-ctx _ _ p-authcid p-password) ctx)
   (define digest (bytes->hex-string (hmac 'md5 p-password msg)))
   (define response (format "~a ~a" p-authcid digest))
-  (set-sasl! ctx response #f))
+  (set-sasl! ctx response 'done))
 
 (define (cram-md5-client-response authcid password challenge)
   (define p-authcid (saslprep authcid #:who 'cram-md5-client-response))

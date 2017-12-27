@@ -40,7 +40,7 @@
   (define! h client-nonce (or client-nonce0 (generate-client-nonce)))
   (define! h msg-c1/bare (format "n=~a,r=~a" (encode-name p-authcid) client-nonce))
   (define! h msg-c1 (string-append gs2-header msg-c1/bare))
-  (scram-client-ctx msg-c1 (cons 'send scram-client-receive-1) h))
+  (scram-client-ctx msg-c1 scram-client-receive-1 h))
 
 (define CLIENT-NONCE-SIZE 24)
 (define (generate-client-nonce)
@@ -110,7 +110,7 @@
   (define! h server-signature (hmac digest server-key auth-message))
   ;; client-final-message = client-final-message-wo-proof "," proof
   (define! h msg-c2 (format "~a,p=~a" msg-c2/no-proof (base64-encode client-proof "")))
-  (set-sasl! ctx msg-c2 (cons 'send scram-client-receive-2)))
+  (set-sasl! ctx msg-c2 scram-client-receive-2))
 
 ;; 4: S->C
 
@@ -124,7 +124,7 @@
               (define! h signature (base64->bytes verifier))
               (unless (equal? signature server-signature)
                 (fatal ctx "received invalid signature from server"))
-              (set-sasl! ctx #f 'success))]
+              (set-sasl! ctx #f 'done))]
         [(hash-ref records #\e)
          => (lambda (server-error)
               (hash-set! h 'error server-error)
