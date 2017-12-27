@@ -30,10 +30,6 @@
 ;; An IntSet is (Vector {lo hi} ...)
 ;; Intepretation: (lambda (x) (or (<= lo x hi) ...))
 
-(define (int-in-set?/linear n is)
-  (for/or ([i (in-range 0 (vector-length is) 2)])
-    (<= (vector-ref is i) n (vector-ref is (add1 i)))))
-
 (define (int-in-set? seek is)
   ;; (eprintf "seeking ~s\n" seek)
   (define (value k) (vector-ref is k))
@@ -55,11 +51,3 @@
     (cond [(<= (value 0) seek (value last))
            (loop 0 last)]
           [else #f])))
-
-(module+ test
-  (define v #(2 4 7 7 9 9 15 19 21 21))
-  (for ([i (in-range 25)])
-    (define r1 (int-in-set?/linear i v))
-    (define r2 (int-in-set? i v))
-    (unless (equal? r1 r2)
-      (error "disagree on ~s: ~s vs ~s" i r1 r2))))

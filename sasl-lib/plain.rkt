@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/contract/base
-         "saslprep.rkt")
+         "private/saslprep.rkt")
 (provide (contract-out
           [plain-client-message
            (->* [safe-string? safe-string?]

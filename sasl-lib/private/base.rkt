@@ -45,13 +45,13 @@
 
 ;; ----------------------------------------
 
-(struct exn:fail:sasl:fatal (msg))
+(struct exn:fail:sasl:fatal exn:fail (msg))
 
-(define (fatal ctx #:who [who #f] fmt . args)
+(define (fatal ctx #:who [who0 #f] fmt . args)
   (when ctx (set-sasl-ctx-k! ctx 'error))
-  (define who (or who 'sasl-receive-message))
+  (define who (or who0 'sasl-receive-message))
   (define msg (apply format fmt args))
-  (raise (exn:fail:sasl:fatal (current-continuation-marks) (format "~a: ~a" who msg) msg)))
+  (raise (exn:fail:sasl:fatal (format "~a: ~a" who msg) (current-continuation-marks) msg)))
 
 ;; ----------------------------------------
 

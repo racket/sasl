@@ -24,7 +24,9 @@
 
 ;; 1: C->S
 
-(define (make-scram-client-ctx digest authcid password #:authorization-id [authzid #f])
+(define (make-scram-client-ctx digest authcid password
+                               #:authorization-id [authzid #f]
+                               #:client-nonce [client-nonce0 #f])
   (define h (make-hasheq))
   (hash-set! h 'digest digest)
   (define! h cbind #f)
@@ -35,7 +37,7 @@
     (string-append (cond [(string? cbind) (format "p=~a" cbind)]
                          [else (if cbind "y" "n")])
                    "," (if p-authzid (format "a=~a" (encode-name p-authzid)) "") ","))
-  (define! h client-nonce (generate-client-nonce))
+  (define! h client-nonce (or client-nonce0 (generate-client-nonce)))
   (define! h msg-c1/bare (format "n=~a,r=~a" (encode-name p-authcid) client-nonce))
   (define! h msg-c1 (string-append gs2-header msg-c1/bare))
   (scram-client-ctx msg-c1 (cons 'send scram-client-receive-1) h))
