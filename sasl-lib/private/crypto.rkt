@@ -48,8 +48,8 @@
         (_int = (bytes-length data))
         (md : _bytes = (make-bytes (EVP_MD_size alg)))
         (_pointer = #f)
-        -> (r : _int)
-        -> (and (positive? r) md)))
+        -> (r : _pointer)
+        -> (and r md)))
 
 (define-libcrypto PKCS5_PBKDF2_HMAC
   (_fun (digest password salt iters keylen) ::
