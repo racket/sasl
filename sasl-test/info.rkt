@@ -6,3 +6,5 @@
                "sasl-lib"
                "rackunit-lib"))
 (define update-implies '("sasl-lib"))
+
+(define pkg-authors '(ryanc))

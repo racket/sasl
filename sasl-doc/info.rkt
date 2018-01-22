@@ -9,3 +9,5 @@
 (define update-implies '("sasl-lib"))
 
 (define scribblings '(("sasl.scrbl" () (net-library))))
+
+(define pkg-authors '(ryanc))
