@@ -1,9 +1,8 @@
 #lang info
 
-(define version "1.0")
 (define collection "sasl")
 (define deps '("base"
-               "sasl-lib"
+               ["sasl-lib" #:version "1.1"]
                "rackunit-lib"))
 (define update-implies '("sasl-lib"))
 

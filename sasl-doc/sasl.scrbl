@@ -172,7 +172,9 @@ connection. The @racket[channel-binding] argument should be
 not offer a @tt{PLUS} option. The @racket[channel-binding] argument
 should be @racket[#f] if the client does not support channel binding
 (for example, if the channel is not a TLS connection).
-}
+
+@history[#:changed "1.1" @elem{Added the @racket[#:channel-binding]
+argument and support for @tt{PLUS} mechanism variants.}]}
 
 @; ----------------------------------------
 @section[#:tag "sasl-cram-md5"]{@tt{CRAM-MD5} Authentication}
