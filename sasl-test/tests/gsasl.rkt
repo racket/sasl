@@ -107,6 +107,12 @@
        (void)]))
   (loop))
 
+(define (call/custodian proc)
+  (define cust (make-custodian))
+  (parameterize ((current-custodian cust)
+                 (current-subprocess-custodian-mode 'kill))
+    (dynamic-wind void proc (lambda () (custodian-shutdown-all cust)))))
+
 ;; ============================================================
 
 (define CBDATA #"123456789012")
@@ -120,25 +126,33 @@
 (when (file-exists? gsasl-exe)
 
   (test-case "gsasl scram-sha-1"
-    (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil")
-                    (gsasl-server "SCRAM-SHA-1" #f "pencil")))
+    (call/custodian
+     (lambda ()
+       (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil")
+                       (gsasl-server "SCRAM-SHA-1" #f "pencil")))))
 
   (test-case "gsasl scram-sha-1-plus"
-    (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil"
-                                           #:channel-binding `(tls-unique ,CBDATA))
-                    (gsasl-server "SCRAM-SHA-1-PLUS" CBDATA "pencil")))
+    (call/custodian
+     (lambda ()
+       (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil"
+                                              #:channel-binding `(tls-unique ,CBDATA))
+                       (gsasl-server "SCRAM-SHA-1-PLUS" CBDATA "pencil")))))
 
   (test-case "gsasl scram-sha-1 bad password"
-    (check-exn #rx"Error authenticating user"
-               (lambda ()
-                 (test-handshake (make-scram-client-ctx 'sha1 "user" "ballpoint")
-                                 (gsasl-server "SCRAM-SHA-1" #f "pencil")))))
+    (call/custodian
+     (lambda ()
+       (check-exn #rx"Error authenticating user"
+                  (lambda ()
+                    (test-handshake (make-scram-client-ctx 'sha1 "user" "ballpoint")
+                                    (gsasl-server "SCRAM-SHA-1" #f "pencil")))))))
 
   (test-case "gsasl scram-sha-1-plus bad cb"
-    (check-exn #rx"Error authenticating user"
-               (lambda ()
-                 (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil"
-                                                        #:channel-binding `(tls-unique ,CBDATA))
-                                 (gsasl-server "SCRAM-SHA-1-PLUS" BAD-CBDATA "pencil")))))
+    (call/custodian
+     (lambda ()
+       (check-exn #rx"Error authenticating user"
+                  (lambda ()
+                    (test-handshake (make-scram-client-ctx 'sha1 "user" "pencil"
+                                                           #:channel-binding `(tls-unique ,CBDATA))
+                                    (gsasl-server "SCRAM-SHA-1-PLUS" BAD-CBDATA "pencil")))))))
 
   (void))
