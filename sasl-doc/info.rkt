@@ -10,3 +10,6 @@
 (define scribblings '(("sasl.scrbl" () (net-library))))
 
 (define pkg-authors '(ryanc))
+
+(define license
+  '(Apache-2.0 OR MIT))
