@@ -70,10 +70,11 @@
 
 ;; scram-client-receive-1 : Ctx String -> Void
 (define (scram-client-receive-1 ctx msg-s1)
+  (define msg-s1-str (->string msg-s1))
   (match-define (scram-client-ctx _ _ h) ctx)
   (define/ref h (client-nonce digest gs2-header p-password cbind msg-c1/bare))
-  (hash-set! h 'msg-s1 msg-s1)
-  (define records (split-message ctx msg-s1 '(#\i #\s #\r)))
+  (hash-set! h 'msg-s1 msg-s1-str)
+  (define records (split-message ctx msg-s1-str '(#\i #\s #\r)))
 
   (define! h iters
     (let ([iters0 (hash-ref records #\i)])
@@ -109,7 +110,7 @@
   ;; AuthMessage     := client-first-message-bare + "," +
   ;;                    server-first-message + "," +
   ;;                    client-final-message-without-proof
-  (define! h auth-message (string-append msg-c1/bare "," msg-s1 "," msg-c2/no-proof))
+  (define! h auth-message (string-append msg-c1/bare "," msg-s1-str "," msg-c2/no-proof))
   ;; ClientSignature := HMAC(StoredKey, AuthMessage)
   (define! h client-signature (hmac digest stored-key auth-message))
   ;; ClientProof     := ClientKey XOR ClientSignature
@@ -123,10 +124,11 @@
 ;; 4: S->C
 
 (define (scram-client-receive-2 ctx msg-s2)
+  (define msg-s2-str (->string msg-s2))
   (match-define (scram-client-ctx _ _ h) ctx)
   (define/ref h (server-signature))
-  (hash-set! h 'msg-s2 msg-s2)
-  (define records (split-message ctx msg-s2 '()))
+  (hash-set! h 'msg-s2 msg-s2-str)
+  (define records (split-message ctx msg-s2-str '()))
   (cond [(hash-ref records #\v)
          => (lambda (verifier)
               (define! h signature (base64->bytes verifier))
@@ -170,3 +172,6 @@
 
 (define (alpha-char? c)
   (or (char<=? #\a c #\z) (char<=? #\A c #\Z)))
+
+(define (->string msg)
+  (if (string? msg) msg (bytes->string/utf-8 msg)))
