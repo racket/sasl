@@ -68,7 +68,7 @@
 ;; 2: S->C
 ;; 3: C->S
 
-;; scram-client-receive-1 : Ctx String -> Void
+;; scram-client-receive-1 : Ctx Bytes|String -> Void
 (define (scram-client-receive-1 ctx msg-s1)
   (define msg-s1-str (->string msg-s1))
   (match-define (scram-client-ctx _ _ h) ctx)
