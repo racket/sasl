@@ -17,6 +17,7 @@
 (define-libcrypto EVP_md5    (_fun -> _EVP_MD))
 (define-libcrypto EVP_sha1   (_fun -> _EVP_MD))
 (define-libcrypto EVP_sha256 (_fun -> _EVP_MD))
+(define-libcrypto EVP_sha512 (_fun -> _EVP_MD))
 
 ;; In libcrypto 1.1, EVP_MD_CTX_{create,destroy} renamed to {new,free}.
 (define-libcrypto EVP_MD_CTX_new (_fun -> _EVP_MD_CTX))
@@ -94,6 +95,7 @@
     [(md5) (EVP_md5)]
     [(sha1) (EVP_sha1)]
     [(sha256) (EVP_sha256)]
+    [(sha512) (EVP_sha512)]
     [else (error who "unsupported digest\n  digest: ~e" digest)]))
 
 (define (bytes-xor bs1 bs2)

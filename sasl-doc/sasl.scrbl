@@ -129,9 +129,11 @@ on their arguments when appropriate.
 This module implements the @hyperlink["https://tools.ietf.org/html/rfc5802"]{@tt{SCRAM}}
 family of authentication mechanisms, namely
 @as-index{@hyperlink["https://tools.ietf.org/html/rfc5802"]{@tt{SCRAM-SHA-1}
-and @tt{SCRAM-SHA-1-PLUS}}} and
+and @tt{SCRAM-SHA-1-PLUS}}},
 @as-index{@hyperlink["https://tools.ietf.org/html/rfc7677"]{@tt{SCRAM-SHA-256}
-and @tt{SCRAM-SHA-256-PLUS}}}.
+and @tt{SCRAM-SHA-256-PLUS}}} and
+@as-index{@hyperlink["https://datatracker.ietf.org/doc/html/draft-melnikov-scram-sha-512-02"]{@tt{SCRAM-SHA-512}
+and @tt{SCRAM-SHA-512-PLUS}}}.
 
 The @tt{SCRAM} protocol family has the following structure:
 @itemlist[#:style 'ordered
@@ -144,7 +146,7 @@ In particular: the client sends the first message; authentication success or
 failure is conveyed at in SASL protocol layer; and the server authenticates
 itself to the client. Messages are represented as strings.
 
-@defproc[(make-scram-client-ctx [digest (or/c 'sha1 'sha256)]
+@defproc[(make-scram-client-ctx [digest (or/c 'sha1 'sha256 'sha512)]
                                 [authentication-id string?]
                                 [password string?]
                                 [#:authorization-id authorization-id (or/c string? #f) #f]
@@ -153,10 +155,11 @@ itself to the client. Messages are represented as strings.
                                                    #f])
          sasl-ctx?]{
 
-Creates a @tt{SCRAM} protocol context. The @racket[digest] argument selects
-between @tt{SCRAM-SHA-1} and @tt{SCRAM-SHA-256}. The @racket[authentication-id],
-@racket[password], and (if provided) @racket[authorization-id] arguments are
-automatically processed using @racket[saslprep].
+Creates a @tt{SCRAM} protocol context. The @racket[digest] argument
+selects between @tt{SCRAM-SHA-1}, @tt{SCRAM-SHA-256} and
+@tt{SCRAM-SHA-512}, respectively. The @racket[authentication-id],
+@racket[password], and (if provided) @racket[authorization-id]
+arguments are automatically processed using @racket[saslprep].
 
 The @racket[channel-binding] argument must have the form @racket[(list
 _cb-type _cb-data)] if the server offered and the client selected a
@@ -173,8 +176,12 @@ not offer a @tt{PLUS} option. The @racket[channel-binding] argument
 should be @racket[#f] if the client does not support channel binding
 (for example, if the channel is not a TLS connection).
 
-@history[#:changed "1.1" @elem{Added the @racket[#:channel-binding]
-argument and support for @tt{PLUS} mechanism variants.}]}
+@history[
+  #:changed "1.1" @elem{Added the @racket[#:channel-binding]
+  argument and support for @tt{PLUS} mechanism variants.}
+
+  #:changed "1.2" @elem{Added support for the @racket['sha512]
+  digest.}]}
 
 @; ----------------------------------------
 @section[#:tag "sasl-cram-md5"]{@tt{CRAM-MD5} Authentication}
