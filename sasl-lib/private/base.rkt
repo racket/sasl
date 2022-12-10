@@ -1,8 +1,8 @@
 #lang racket/base
-(require racket/match
-         racket/string
-         racket/list
-         net/base64)
+
+(require net/base64
+         racket/match)
+
 (provide (all-defined-out))
 
 ;; ----
@@ -11,6 +11,9 @@
 ;; where outbox : String/Bytes or #f -- #f means no message available
 ;;       k : (self String/Bytes -> Void) | 'done | 'error
 ;; INV: if k = 'error then outbox = #f
+
+(define (make-sasl-ctx aux out next)
+  (sasl-ctx out (wrap-next-proc aux next)))
 
 (define (sasl-next-message ctx)
   (define msg (sasl-ctx-outbox ctx))
@@ -38,6 +41,18 @@
 (define (set-sasl! ctx outbox k)
   (set-sasl-ctx-outbox! ctx outbox)
   (set-sasl-ctx-k! ctx k))
+
+(define (wrap-next-proc aux proc)
+  (if (eq? proc 'done)
+      'done
+      (lambda (ctx data)
+        (unless (or (bytes? data)
+                    (string? data))
+          (raise-argument-error 'sasl-receive-message "(or/c bytes? string?)" data))
+        (with-handlers ([exn:fail? (λ (e) (fatal ctx "custom context error: ~a" (exn-message e)))])
+          (define-values (out next)
+            (proc aux data))
+          (set-sasl! ctx out (wrap-next-proc aux next))))))
 
 ;; ----------------------------------------
 

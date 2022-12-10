@@ -51,6 +51,38 @@ Returns @racket[#t] if @racket[v] is a @tech{SASL protocol context}, @racket[#f]
 otherwise.
 }
 
+@defproc[(make-sasl-ctx [aux any/c]
+                        [out (or/c #f bytes? string?)]
+                        [next sasl-next/c]) sasl-ctx?]{
+  Returns a custom SASL protocol context.  Use this procedure when you
+  need to implement a SASL mechanism that is not directly supported by
+  this library.
+
+  The @racket[aux] argument is an implementation-dependent value that
+  is passed in calls to the context's transition procedures.
+
+  The @racket[out] argument provides the initial outgoing message to
+  be sent.  If its value is @racket[#f], then the state of the context
+  is one in which it does not send an initial message.  Otherwise, the
+  state of the context is @racket['send/receive] or
+  @racket['send/done], depending on the value of @racket[next].
+
+  The @racket[next] argument transitions the context into the next
+  state when a message is received.  If its value is @racket['done],
+  the context is transitioned into a state where it may not receive
+  new messages.  If its value is a procedure, then the next time a
+  message is received, that procedure will be called with @racket[aux]
+  and the received message as arguments.  Its two return values will
+  be used as the value of the next outgoing message, and the next
+  transition procedure, respectively.
+
+  When @racket[next] raises an exception, the context is automatically
+  transitioned into the @racket['error] state and an
+  @racket[exn:fail:sasl:fatal?] exception is raised.
+
+  @history[#:added "1.3"]
+}
+
 @defproc[(sasl-next-message [ctx sasl-ctx?])
          (or/c string? bytes?)]{
 
@@ -104,6 +136,24 @@ protocol is done}
 @item{@racket['done]: the SASL protocol ended with the last received message}
 @item{@racket['error]: a fatal error occurred}
 ]
+}
+
+@defthing[
+  #:kind "contract"
+  sasl-next/c contract?
+  #:value (or/c 'done
+                (-> any/c
+                    (or/c bytes? string?)
+                    (values (or/c #f bytes? string?) sasl-next/c)))
+]{
+  The contract for custom SASL mechanism state transition procedures.
+}
+
+@defstruct[(exn:fail:sasl:fatal exn:fail)
+           ([msg string?])]{
+
+  The exception that is raised by SASL contexts when a fatal error
+  occurs.
 }
 
 
