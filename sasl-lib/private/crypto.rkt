@@ -16,11 +16,6 @@
                 (lambda ()
                   (get-ffi-obj 'EVP_MD_get_size libcrypto (_fun _EVP_MD -> _int)
                                (make-not-available name)))))
-(define-libcrypto EVP_MD_block_size (_fun _EVP_MD -> _int)
-  #:make-fail (lambda (name)
-                (lambda ()
-                  (get-ffi-obj 'EVP_MD_get_block_size libcrypto (_fun _EVP_MD -> _int)
-                               (make-not-available name)))))
 
 (define-libcrypto EVP_md5    (_fun -> _EVP_MD))
 (define-libcrypto EVP_sha1   (_fun -> _EVP_MD))
